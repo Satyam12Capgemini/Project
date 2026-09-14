@@ -1,0 +1,10 @@
+Design a microservice architecture
+for an ecommerce application.
+
+Requirements:
+
+- Product Service
+- Order Service
+- Inventory Service
+- Payment Service
+- Notification Service
