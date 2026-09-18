@@ -1,0 +1,732 @@
+# Low-Level Design (LLD) Document
+## Project: AI Ecommerce Assistant (Enterprise Edition)
+**Document Version:** 1.0.0  
+**Status:** Approved for Implementation  
+**Target Platform:** Web / Responsive Desktop & Mobile  
+**Audience:** Enterprise Architecture Board, Engineering Leads, Security Team, Full-Stack Developers  
+ 
+---
+ 
+### 1. Executive Summary
+The **AI Ecommerce Assistant** is a next-generation, intelligent retail platform engineered to bridge traditional transactional commerce with autonomous conversational assistance. Unlike legacy e-commerce chatbots that operate as simple question-and-answer bots, the system incorporates an **Enterprise AI Shopping Agent** powered by the **Capgemini Generative Engine** and `openai.gpt-5-mini`.
+ 
+The platform facilitates discovery, comparison, personalized advisory, dynamic cart mutations, and full order lifecycle operations (placement, live tracking, order cancellation, and one-click reordering) through both conversational interaction (text and voice) and a Material-designed web interface. The solution is architected as a decoupled, responsive Single-Page Application (SPA) built with **Angular 22**, a high-performance asynchronous REST backend built with **Python FastAPI**, and an ACID-compliant transactional persistence layer on **Microsoft SQL Server (LocalDB)**.
+ 
+---
+ 
+### 2. Project Objectives
+1. **Autonomous Commerce Engagement**: Transition customer interaction from browsing static lists to proactive AI procurement guidance, reducing cognitive fatigue and cart abandonment.
+2. **Deterministic & Generative Hybrid Intelligence**: Pair deterministic, low-latency business logic (cart calculations, inventory checks, order cancellations) with generative semantic reasoning (budget recommendations, multi-item concierge bundles, comparative analysis).
+3. **Voice-First Accessibility**: Provide hands-free natural language procurement using client-side Web Speech API integrated with real-time intent processing.
+4. **End-to-End Enterprise Commerce Lifecycle**: Provide full self-service lifecycle management including granular quantity adjustment, live parcel tracking, autonomous order cancellation with simulated refund routing, and past-order reordering.
+5. **High Reliability & Low Latency**: Achieve sub-200ms REST API response times and sub-500ms conversational inference latency while ensuring strict data consistency across relational transactions.
+ 
+---
+ 
+### 3. Functional Requirements
+ 
+#### 3.1 Authentication & User Management
+- **FR-AUTH-01 (Signup)**: Enable customers to register with First Name, Last Name, Email, Password, and AI procurement preferences/interests (e.g., *Mobiles, Gaming Laptops, Audio*).
+- **FR-AUTH-02 (Password Security)**: Enforce strong credentials (minimum 8 characters, uppercase, lowercase, numeric, and special character) hashed using PBKDF2-HMAC-SHA256 with cryptographically secure salts.
+- **FR-AUTH-03 (Login & Session)**: Authenticate registered credentials, validate against database records, and issue session contexts storing user profiles and shopping history.
+- **FR-AUTH-04 (Role-Based Access Control)**: Enforce role separation (`Customer`, `Admin`) across endpoints.
+ 
+#### 3.2 E-Commerce Storefront
+- **FR-ECOMM-01 (Catalog Browsing & Search)**: Categorized browsing (Mobiles, Laptops, Accessories) with real-time keyword search, stock levels, and pricing.
+- **FR-ECOMM-02 (Product Details)**: Comprehensive product views detailing technical specifications, warranty, availability, and pros/cons.
+- **FR-ECOMM-03 (Cart Management)**: Add items with custom quantities, update quantities, delete line items, calculate real-time taxes/shipping, and clear carts.
+- **FR-ECOMM-04 (Order Placement)**: Atomic transaction converting active cart items into persistent `Orders` and `OrderItems` records, decrementing inventory, and resetting active carts.
+- **FR-ECOMM-05 (Order Tracking)**: Track live dispatch milestones (Placed, Processing, Dispatched, Shipped, Delivered) with estimated delivery dates.
+- **FR-ECOMM-06 (Order Cancellation)**: Self-service order cancellation for eligible statuses (`PLACED`, `PROCESSING`), updating persistent state to `CANCELLED`.
+- **FR-ECOMM-07 (Reorder)**: Re-add all items from any previously placed order directly into the active cart.
+ 
+#### 3.3 AI Shopping Agent
+- **FR-AI-01 (Product Search & Filtering)**: Natural language queries with price ceilings (e.g., *"Show mobiles under ₹30,000"*).
+- **FR-AI-02 (Recommendations with Reasoning)**: Curated device recommendations with explicit *"Why?"* rationale based on customer workloads.
+- **FR-AI-03 (Product Comparison ⭐)**: Dynamic side-by-side feature comparison between any two catalog items (e.g., *Samsung M35 vs OnePlus Nord CE*), detailing display, battery, camera, and concluding with a recommended pick.
+- **FR-AI-04 (Cart Mutation Actions)**: Add items to cart (*"Add Samsung M35 to cart"*), adjust quantities (*"Increase Samsung quantity to 3"*), remove items (*"Delete Acer from cart"*), and calculate cart total (*"How much will I pay?"*).
+- **FR-AI-05 (Autonomous Checkout)**: Check out and generate orders directly via natural language (*"Checkout"*, *"Place order"*).
+- **FR-AI-06 (Order Operations)**: Track orders (*"Where is my order?"*) and cancel orders (*"Cancel order #1009"*).
+- **FR-AI-07 (Smart Budget Advisor ⭐)**: Recommend the best product fitting a budget limit (e.g., *"I have ₹25,000. Which phone is best?"*).
+- **FR-AI-08 (Out-of-Stock Alternatives)**: Propose in-stock substitutes when a requested brand/model is unavailable (e.g., *iPhone 16* -> *Samsung S24 / OnePlus Nord CE*).
+- **FR-AI-09 (Complete Setup Concierge ⭐)**: Assemble a multi-item package matching budget constraints (e.g., *"Build a complete setup under ₹60,000"* -> Laptop + Earbuds + Watch) with a one-click *"Add Setup to Cart"* CTA.
+- **FR-AI-10 (Voice Shopping 🎙️)**: Native speech recognition transcribing verbal instructions to text commands.
+- **FR-AI-11 (Personalized Suggestions)**: Contextual onboarding and hardware suggestions derived from user profile interest tags and order history.
+ 
+---
+ 
+### 4. Non-Functional Requirements
+ 
+| Category | Requirement | Metric / Standard |
+|---|---|---|
+| **Performance** | API Response Latency | p95 < 150ms for relational queries; p95 < 450ms for AI inference |
+| **Performance** | Client Bundle Size | Initial JS transfer size < 200 KB via tree-shaking & gzip/brotli |
+| **Scalability** | Concurrency | Asynchronous non-blocking event loop supporting 1,000+ RPS |
+| **Reliability & ACID** | Transactional Integrity | Zero orphan cart items; 100% atomic rollbacks on checkout failure |
+| **Availability** | Uptime SLA | 99.9% uptime target in production deployment |
+| **Security** | Authentication & Encryption | PBKDF2-HMAC-SHA256 (100,000 iterations), TLS 1.3 in transit |
+| **Maintainability** | Code Cleanliness | Clean Architecture, separation of concerns, 100% typed contracts |
+| **Browser Compatibility** | Standards Compliance | Evergreen browsers (Chrome, Edge, Firefox, Safari) |
+ 
+---
+ 
+### 5. System Architecture
+ 
+The solution implements a **Layered Clean Architecture** decoupled across presentation, API orchestration, domain business logic, and transactional persistence.
+ 
+```mermaid
+flowchart TD
+    subgraph Client Tier [Presentation Tier - Angular 22 & Angular Material]
+        UI[Material Web Components & Views]
+        ChatWidget[Floating AI Assistant & Voice Mic]
+        State[Signals & RxJS Reactive State]
+        HTTPClient[Angular HttpClient + Auth Interceptor]
+        WebSpeech[Web Speech Recognition Engine]
+    end
+ 
+    subgraph Gateway [API Gateway & Routing Tier]
+        CORS[CORS Middleware]
+        Uvicorn[Uvicorn ASGI High-Performance Server]
+        FastAPI[FastAPI Router & DI Container]
+    end
+ 
+    subgraph Service Tier [Application & AI Orchestration Layer]
+        AuthService[Auth & PBKDF2 Hash Engine]
+        CartService[Cart Mutation & Calculation Manager]
+        OrderService[Order Lifecycle & State Machine]
+        ProductService[Catalog & Inventory Engine]
+        AIService[AI Shopping Agent & Intent Parser]
+        GenEngine[Capgemini Generative Engine / openai.gpt-5-mini]
+    end
+ 
+    subgraph Data Tier [Persistence Layer]
+        ORM[SQLAlchemy 2.0 ORM]
+        DB[(Microsoft SQL Server LocalDB)]
+    end
+ 
+    UI --> State
+    ChatWidget --> WebSpeech
+    WebSpeech --> State
+    State --> HTTPClient
+    HTTPClient -- HTTPS / REST --> CORS
+    CORS --> Uvicorn
+    Uvicorn --> FastAPI
+ 
+    FastAPI --> AuthService
+    FastAPI --> CartService
+    FastAPI --> OrderService
+    FastAPI --> ProductService
+    FastAPI --> AIService
+ 
+    AIService --> GenEngine
+    AIService --> ORM
+    AuthService --> ORM
+    CartService --> ORM
+    OrderService --> ORM
+    ProductService --> ORM
+ 
+    ORM --> DB
+```
+ 
+---
+ 
+### 6. Component Diagram
+ 
+```mermaid
+classDiagram
+    class FrontendComponents {
+        +NavbarComponent
+        +SidebarComponent
+        +ProductCatalogComponent
+        +CartPageComponent
+        +OrdersPageComponent
+        +ChatbotComponent
+        +LoginComponent
+        +SignupComponent
+    }
+ 
+    class FrontendServices {
+        +AuthService: Signal<User>
+        +CartService: Signal<number>
+        +OrderService: Observable<Order[]>
+        +ProductService: Observable<Product[]>
+        +AiChatService: Signal<boolean>
+    }
+ 
+    class BackendRouters {
+        +/auth: APIRouter
+        +/products: APIRouter
+        +/cart: APIRouter
+        +/orders: APIRouter
+        +/chatbot: APIRouter
+    }
+ 
+    class BusinessServices {
+        +AIService: process_message()
+        +AuthEngine: hash_password(), verify_password()
+        +OrderManager: cancel(), reorder(), track()
+    }
+ 
+    class DatabaseModels {
+        +User
+        +Product
+        +CartItem
+        +Order
+        +OrderItem
+    }
+ 
+    FrontendComponents --> FrontendServices : invokes
+    FrontendServices ..> BackendRouters : HTTP JSON
+    BackendRouters --> BusinessServices : calls
+    BusinessServices --> DatabaseModels : queries/mutates
+```
+ 
+---
+ 
+### 7. Frontend Architecture (Angular 22)
+ 
+#### 7.1 Architecture Design Principles
+- **Standalone Component Topology**: Fully tree-shakable components with no `NgModule` boilerplate.
+- **Fine-Grained Reactivity (Angular Signals)**: State management utilizes signals (`signal()`, `computed()`) for reactive rendering, such as `cartCount = signal<number>(0)`, eliminating unnecessary change-detection passes.
+- **Client-Side Voice Recognition**: Web Speech API integration through `webkitSpeechRecognition` / `SpeechRecognition` handles speech-to-text natively with zero third-party cloud SDK dependencies.
+- **HTTP Interceptors**: `AuthInterceptor` intercepts all outgoing requests to inject authentication tokens and handles global errors.
+ 
+#### 7.2 Directory Structure
+```
+frontend/src/app/
+├── components/
+│   ├── auth/ (branding-panel, password-strength-meter)
+│   ├── chatbot/ (chatbot.ts, chatbot.html, chatbot.css)
+│   ├── navbar/ (navbar.ts, navbar.html, navbar.css)
+│   └── sidebar/ (sidebar.ts, sidebar.html, sidebar.css)
+├── guards/ (auth.guard.ts)
+├── interceptors/ (auth.interceptor.ts)
+├── models/ (ecommerce.models.ts)
+├── pages/
+│   ├── cart/ (cart.ts, cart.html, cart.css)
+│   ├── dashboard/ (dashboard.ts, dashboard.html)
+│   ├── login/ (login.ts, login.html)
+│   ├── orders/ (orders.ts, orders.html, orders.css)
+│   ├── products/ (products.ts, products.html)
+│   └── signup/ (signup.ts, signup.html)
+└── services/
+    ├── ai-chat.ts
+    ├── auth.ts
+    ├── cart.ts
+    ├── order.ts
+    └── product.ts
+```
+ 
+---
+ 
+### 8. Backend Architecture (Python FastAPI)
+ 
+#### 8.1 Architectural Paradigm
+- **Asynchronous Non-Blocking Core**: Built on Starlette and Uvicorn ASGI engine.
+- **Pydantic Validation Layer**: All inbound payloads and outbound entities are strictly typed and validated using Pydantic models.
+- **Dependency Injection (DI)**: Database sessions (`get_db`) and authenticated identity (`get_current_user_id`) are injected at the controller method level.
+- **Deterministic-Generative AI Orchestration**: `AIService` orchestrates natural language tokens through a multi-tier pattern matching and evaluation engine, mapping intent directly to database operations and generative reasoning routines.
+ 
+#### 8.2 Backend Directory Structure
+```
+backend/app/
+├── database.py       # SQLAlchemy engine & session factory
+├── dependencies.py   # FastAPI Dependency Injection (DB, Auth)
+├── main.py           # FastAPI entrypoint, middleware, startup seeds
+├── models.py         # SQLAlchemy ORM declarative models
+├── schemas.py        # Pydantic schemas (DTo contracts)
+├── routers/
+│   ├── auth.py       # Authentication, registration, login
+│   ├── cart.py       # Cart operations & quantity update
+│   ├── chatbot.py    # AI Assistant conversational endpoint
+│   ├── orders.py     # Order checkout, cancellation, tracking, reorder
+│   └── products.py   # Product catalog CRUD
+└── services/
+    └── ai_service.py # Core NLU, comparison logic, concierge, recommendation
+```
+ 
+---
+ 
+### 9. Database Design
+ 
+- **Engine**: Microsoft SQL Server (LocalDB `(localdb)\MSSQLLocalDB`, database name: `AI_ECOMMERCE`).
+- **Driver**: `ODBC Driver 18 for SQL Server` via `mssql+pyodbc`.
+- **Normalization**: Normalized to Third Normal Form (3NF) to guarantee transactional integrity.
+- **Concurrency & Locking**: Standard SQL Server row-level locking during atomic checkout and order cancellations.
+ 
+---
+ 
+### 10. Entity Relationship Diagram (ERD)
+ 
+```mermaid
+erDiagram
+    USERS ||--o{ ORDERS : places
+    USERS ||--o{ CART_ITEMS : maintains
+    ORDERS ||--|{ ORDER_ITEMS : contains
+    PRODUCTS ||--o{ ORDER_ITEMS : referenced_in
+    PRODUCTS ||--o{ CART_ITEMS : added_as
+ 
+    USERS {
+        int UserId PK "IDENTITY(1,1)"
+        varchar(100) FirstName "NOT NULL"
+        varchar(100) LastName "NOT NULL"
+        varchar(255) Email "UNIQUE, INDEX"
+        varchar(255) PasswordHash "NOT NULL"
+        varchar(50) Role "DEFAULT 'Customer'"
+        varchar(500) Interests "NULLABLE"
+        datetime CreatedAt "DEFAULT GETDATE()"
+    }
+ 
+    PRODUCTS {
+        int ProductId PK "IDENTITY(1,1)"
+        varchar(255) Name "NOT NULL, INDEX"
+        varchar(100) Category "NOT NULL, INDEX"
+        numeric(18,2) Price "NOT NULL"
+        int Stock "NOT NULL"
+    }
+ 
+    CART_ITEMS {
+        int CartItemId PK "IDENTITY(1,1)"
+        int ProductId FK "REFERENCES Products(ProductId)"
+        int Quantity "NOT NULL"
+        int UserId FK "NULLABLE, REFERENCES Users(UserId)"
+    }
+ 
+    ORDERS {
+        int OrderId PK "IDENTITY(1,1)"
+        int UserId FK "NULLABLE, REFERENCES Users(UserId)"
+        numeric(18,2) TotalAmount "NOT NULL"
+        varchar(50) Status "NOT NULL ('PLACED','SHIPPED','DELIVERED','CANCELLED')"
+        datetime CreatedAt "DEFAULT GETDATE()"
+    }
+ 
+    ORDER_ITEMS {
+        int OrderItemId PK "IDENTITY(1,1)"
+        int OrderId FK "REFERENCES Orders(OrderId)"
+        int ProductId FK "REFERENCES Products(ProductId)"
+        int Quantity "NOT NULL"
+    }
+```
+ 
+---
+ 
+### 11. API Design
+ 
+| Method | Endpoint | Description | Request Body | Response Codes |
+|---|---|---|---|---|
+| `POST` | `/auth/signup` | Customer account registration | `SignupRequest` | 200, 400 |
+| `POST` | `/auth/login` | Authenticate customer credentials | `LoginRequest` | 200, 401 |
+| `GET` | `/auth/users` | Retrieve registered users (Admin) | None | 200 |
+| `GET` | `/products/` | Retrieve all catalog products | None | 200 |
+| `GET` | `/products/{id}` | Retrieve product details by ID | None | 200, 404 |
+| `POST` | `/cart/add` | Add product to active cart | `AddToCartRequest` | 200 |
+| `GET` | `/cart/` | Retrieve user cart with line subtotals | None | 200 |
+| `PUT` | `/cart/{cart_item_id}`| Update specific item quantity | `UpdateCartQuantityRequest` | 200, 404 |
+| `DELETE`| `/cart/{cart_item_id}`| Remove specific line item | None | 200, 404 |
+| `DELETE`| `/cart/clear` | Flush all items from user cart | None | 200 |
+| `POST` | `/orders/` | Checkout cart to confirmed order | `CreateOrderRequest` | 200, 400 |
+| `GET` | `/orders/` | Retrieve order history | None | 200 |
+| `GET` | `/orders/{order_id}` | Retrieve order details & line items | None | 200, 404 |
+| `PUT` | `/orders/cancel/{id}`| Cancel active order | None | 200, 404 |
+| `POST` | `/orders/{id}/reorder`| Add past order items to cart | None | 200, 400, 404 |
+| `POST` | `/chatbot/chat` | AI Shopping Agent conversational execution | `ChatRequest` | 200 |
+ 
+---
+ 
+### 12. Authentication Flow
+ 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant AngularApp as Angular Client (Login)
+    participant AuthRouter as FastAPI /auth/login
+    participant DB as SQL Server (Users)
+ 
+    Customer->>AngularApp: Inputs Email & Password
+    AngularApp->>AuthRouter: POST /auth/login {email, password}
+    AuthRouter->>DB: SELECT * FROM Users WHERE Email = :email
+    alt User Not Found
+        DB-->>AuthRouter: NULL
+        AuthRouter-->>AngularApp: 401 Unauthorized ("Invalid email or password")
+        AngularApp-->>Customer: Display Error Alert
+    else User Exists
+        DB-->>AuthRouter: User Record (Salt, Key Hash)
+        AuthRouter->>AuthRouter: PBKDF2_HMAC_SHA256(password, salt, 100000)
+        alt Computed Key == Stored Key
+            AuthRouter-->>AngularApp: 200 OK (User Profile, Role, Interests)
+            AngularApp->>AngularApp: Store User Context in Signal & LocalStorage
+            AngularApp-->>Customer: Redirect to Dashboard / Products
+        else Password Invalid
+            AuthRouter-->>AngularApp: 401 Unauthorized
+            AngularApp-->>Customer: Display Error Alert
+        end
+    end
+```
+ 
+---
+ 
+### 13. AI Assistant Workflow
+ 
+The conversational engine implements a high-speed, deterministic Intent Extraction & Entity Recognizer paired with the Capgemini Generative Engine / `openai.gpt-5-mini`.
+ 
+```mermaid
+flowchart TD
+    Inbound[User Input via Text or Voice Recognition] --> Normalizer[Message Normalizer & Tokenizer]
+    Normalizer --> Classifier{Intent Classification Pipeline}
+ 
+    Classifier -->|Match Intent: Compare| CompareHandler[Level 2: Product Comparison Matrix Engine]
+    Classifier -->|Match Intent: Concierge| ConciergeHandler[Level 5: AI Setup Concierge Bundle Builder]
+    Classifier -->|Match Intent: Budget| BudgetHandler[Level 4: Budget Advisor & Spec Reasoning]
+    Classifier -->|Match Intent: Cancel Order| CancelHandler[Level 3: Order Cancellation State Engine]
+    Classifier -->|Match Intent: Track Order| TrackHandler[Level 3: Live Order Tracking & ETA Engine]
+    Classifier -->|Match Intent: Reorder| ReorderHandler[Level 3: Previous Order Reorder Engine]
+    Classifier -->|Match Intent: Cart Mutation| CartHandler[Level 1 & 3: Cart Add / Update / Clear Engine]
+    Classifier -->|Match Intent: Search/Rec| SearchHandler[Level 1: Semantic Catalog Search & Filtering]
+    Classifier -->|Unmatched / Complex Reasoning| LLMEngine[Capgemini Generative Engine / gpt-5-mini]
+ 
+    CompareHandler --> DB[(SQL Server)]
+    ConciergeHandler --> DB
+    CancelHandler --> DB
+    TrackHandler --> DB
+    ReorderHandler --> DB
+    CartHandler --> DB
+    SearchHandler --> DB
+    LLMEngine --> DB
+ 
+    DB --> ResponseFormatter[Response Formatter: Markdown, Product Cards, Bundle Cards, Actions]
+    ResponseFormatter --> Outbound[ChatResponse Payload to Client UI]
+```
+ 
+---
+ 
+### 14. Sequence Diagrams
+ 
+#### 14.1 Product Comparison & Card CTA Addition
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant ChatbotUI as Angular Chatbot
+    participant ChatAPI as FastAPI /chatbot/chat
+    participant AIService as AI Shopping Service
+    participant DB as SQL Server
+ 
+    Customer->>ChatbotUI: "Compare Samsung M35 and OnePlus Nord CE"
+    ChatbotUI->>ChatAPI: POST /chatbot/chat {message}
+    ChatAPI->>AIService: process_message()
+    AIService->>DB: Query Products ("Samsung M35", "OnePlus Nord CE")
+    DB-->>AIService: Product Entities with Price, Stock
+    AIService->>AIService: Synthesize Spec Advantages (Battery, Camera, Charging)
+    AIService->>AIService: Compute Recommendation Pick
+    AIService-->>ChatAPI: ChatResponse (response, intent="product_comparison", products=[...])
+    ChatAPI-->>ChatbotUI: 200 OK JSON
+    ChatbotUI->>Customer: Renders Comparison Matrix + Interactive "Add to Cart" Buttons
+    Customer->>ChatbotUI: Clicks "Add" on Samsung M35 Card
+    ChatbotUI->>ChatAPI: POST /chatbot/chat {"Add Samsung M35 to cart"}
+    ChatAPI->>DB: INSERT / UPDATE CartItems
+    DB-->>ChatAPI: OK
+    ChatAPI-->>ChatbotUI: Updated Cart Badge & Confirmation
+```
+ 
+#### 14.2 Order Cancellation with Real-Time Database Mutation
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant ChatbotUI as Angular Chatbot
+    participant ChatAPI as FastAPI /chatbot/chat
+    participant AIService as AI Shopping Service
+    participant DB as SQL Server
+ 
+    Customer->>ChatbotUI: "Cancel Order #1009"
+    ChatbotUI->>ChatAPI: POST /chatbot/chat {message}
+    ChatAPI->>AIService: process_message()
+    AIService->>DB: SELECT * FROM Orders WHERE OrderId = 1009
+    DB-->>AIService: Order Record (Status: 'PLACED')
+    alt Status is Cancelable ('PLACED' or 'PROCESSING')
+        AIService->>DB: UPDATE Orders SET Status = 'CANCELLED' WHERE OrderId = 1009
+        DB-->>AIService: COMMIT
+        AIService-->>ChatAPI: ChatResponse ("Order #1009 cancelled successfully. Refund initiated.")
+        ChatAPI-->>ChatbotUI: 200 OK
+        ChatbotUI->>Customer: Confirms cancellation & displays "View Orders" button
+    else Status is Non-Cancelable ('DELIVERED' or 'CANCELLED')
+        AIService-->>ChatAPI: ChatResponse ("Order cannot be cancelled. Reason: ...")
+        ChatAPI-->>ChatbotUI: 200 OK
+        ChatbotUI->>Customer: Explains cancellation policy restriction
+    end
+```
+ 
+---
+ 
+### 15. API Request and Response Examples
+ 
+#### 15.1 Authentication (`POST /auth/signup`)
+**Request:**
+```json
+{
+  "firstName": "Satyam",
+  "lastName": "Kumar",
+  "email": "satyam@example.com",
+  "password": "SecurePassword@2026",
+  "role": "Customer",
+  "interests": ["Mobiles", "Gaming Laptops"]
+}
+```
+**Response (200 OK):**
+```json
+{
+  "userId": 2004,
+  "name": "Satyam Kumar",
+  "firstName": "Satyam",
+  "lastName": "Kumar",
+  "email": "satyam@example.com",
+  "role": "Customer",
+  "interests": ["Mobiles", "Gaming Laptops"],
+  "createdAt": "2026-09-18T06:55:00.000Z"
+}
+```
+ 
+#### 15.2 Product Comparison (`POST /chatbot/chat`)
+**Request:**
+```json
+{
+  "message": "Compare Samsung M35 and OnePlus Nord CE",
+  "user_name": "Satyam",
+  "user_id": 2004
+}
+```
+**Response (200 OK):**
+```json
+{
+  "response": "**Samsung M35**\n✓ Better Battery (6000 mAh)\n✓ Super AMOLED 120Hz Display\n✓ Lower Price (₹24,999)\n\n**OnePlus Nord CE**\n✓ Better Camera (Sony Sensor)\n✓ Faster Charging (67W SuperVOOC)\n✓ Slim & Lightweight Ergonomics\n\n**Recommended:**\n**Samsung M35** (Samsung M35 offers better value-for-money and high endurance at ₹24,999.)",
+  "intent": "product_comparison",
+  "action_taken": null,
+  "products": [
+    {
+      "ProductId": 1,
+      "Name": "Samsung M35",
+      "Category": "Mobile",
+      "Price": 24999.0,
+      "Stock": 20
+    },
+    {
+      "ProductId": 2,
+      "Name": "OnePlus Nord CE",
+      "Category": "Mobile",
+      "Price": 28999.0,
+      "Stock": 12
+    }
+  ],
+  "comparison": {
+    "product1": {
+      "name": "Samsung M35",
+      "strengths": ["Better Battery (6000 mAh)", "Super AMOLED 120Hz Display", "Lower Price (₹24,999)"]
+    },
+    "product2": {
+      "name": "OnePlus Nord CE",
+      "strengths": ["Better Camera (Sony Sensor)", "Faster Charging (67W SuperVOOC)", "Slim & Lightweight Ergonomics"]
+    },
+    "recommended": "Samsung M35"
+  }
+}
+```
+ 
+#### 15.3 Setup Concierge Bundle (`POST /chatbot/chat`)
+**Request:**
+```json
+{
+  "message": "Build a complete setup under ₹60,000",
+  "user_name": "Satyam",
+  "user_id": 2004
+}
+```
+**Response (200 OK):**
+```json
+{
+  "response": "**Recommended Cart:**\n\n**Laptop:**\nAcer Aspire 7 (₹49,999)\n\n**Accessories:**\nBoat Airdopes 311 (₹1,299)\n\n**Watch:**\nNoise Smart Watch (₹2,499)\n\n**Total:**\n**₹53,797** *(Within your ₹60,000 budget!)*\n\nTo add this entire setup bundle to your cart at once, say: **'Add setup to cart'**!",
+  "intent": "shopping_concierge",
+  "bundle": {
+    "total": 53797.0,
+    "items": ["Acer Aspire 7", "Boat Airdopes 311", "Noise Smart Watch"]
+  },
+  "products": [
+    {"ProductId": 4, "Name": "Acer Aspire 7", "Price": 49999.0, "Category": "Laptop", "Stock": 8},
+    {"ProductId": 7, "Name": "Boat Airdopes 311", "Price": 1299.0, "Category": "Accessories", "Stock": 40},
+    {"ProductId": 8, "Name": "Noise Smart Watch", "Price": 2499.0, "Category": "Accessories", "Stock": 25}
+  ]
+}
+```
+ 
+#### 15.4 Order Cancellation (`PUT /orders/cancel/1009`)
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Order #1009 cancelled successfully.",
+  "order": {
+    "OrderId": 1009,
+    "Status": "CANCELLED",
+    "TotalAmount": 49999.0,
+    "CreatedAt": "2026-09-18T08:35:54.070Z"
+  }
+}
+```
+ 
+#### 15.5 Reorder Previous Order (`POST /orders/1009/reorder`)
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Added items from Order #1009 to your cart.",
+  "orderId": 1009,
+  "readded_items_count": 1,
+  "readded_quantity": 1
+}
+```
+ 
+---
+ 
+### 16. Database Tables with Fields
+ 
+#### 16.1 `Users` Table
+| Column | Type | Nullable | Key / Constraint | Description |
+|---|---|---|---|---|
+| `UserId` | `INT` | No | `PK, IDENTITY(1,1)` | Unique user identifier |
+| `FirstName` | `NVARCHAR(100)` | No | None | Customer first name |
+| `LastName` | `NVARCHAR(100)` | No | None | Customer surname |
+| `Email` | `NVARCHAR(255)` | No | `UNIQUE, NONCLUSTERED INDEX` | Authentication username |
+| `PasswordHash` | `NVARCHAR(255)` | No | None | Salted PBKDF2 hash (`<salt>$<key>`) |
+| `Role` | `NVARCHAR(50)` | No | `DEFAULT 'Customer'` | Role-based authorization tag |
+| `Interests` | `NVARCHAR(500)` | Yes | None | Comma-separated AI interest tags |
+| `CreatedAt` | `DATETIME` | No | `DEFAULT GETDATE()` | Account creation timestamp |
+ 
+#### 16.2 `Products` Table
+| Column | Type | Nullable | Key / Constraint | Description |
+|---|---|---|---|---|
+| `ProductId` | `INT` | No | `PK, IDENTITY(1,1)` | Unique product SKU identifier |
+| `Name` | `NVARCHAR(255)` | No | `INDEX (IX_Products_Name)` | Commercial product title |
+| `Category` | `NVARCHAR(100)` | No | `INDEX (IX_Products_Category)`| Product category (Mobile, Laptop, Accessories)|
+| `Price` | `NUMERIC(18,2)` | No | `CHECK (Price >= 0)` | Unit pricing in INR |
+| `Stock` | `INT` | No | `CHECK (Stock >= 0)` | Warehouse inventory count |
+ 
+#### 16.3 `CartItems` Table
+| Column | Type | Nullable | Key / Constraint | Description |
+|---|---|---|---|---|
+| `CartItemId` | `INT` | No | `PK, IDENTITY(1,1)` | Line item surrogate primary key |
+| `ProductId` | `INT` | No | `FK -> Products(ProductId)` | Associated product record |
+| `Quantity` | `INT` | No | `CHECK (Quantity > 0)` | Quantity staged in cart |
+| `UserId` | `INT` | Yes | `FK -> Users(UserId), INDEX` | Associated user; NULL for anonymous |
+ 
+#### 16.4 `Orders` Table
+| Column | Type | Nullable | Key / Constraint | Description |
+|---|---|---|---|---|
+| `OrderId` | `INT` | No | `PK, IDENTITY(1,1)` | Unique commercial order number |
+| `UserId` | `INT` | Yes | `FK -> Users(UserId), INDEX` | Purchasing customer account |
+| `TotalAmount` | `NUMERIC(18,2)` | No | `CHECK (TotalAmount >= 0)` | Invoiced total amount in INR |
+| `Status` | `NVARCHAR(50)` | No | `DEFAULT 'PLACED'` | Status (`PLACED`,`SHIPPED`,`DELIVERED`,`CANCELLED`)|
+| `CreatedAt` | `DATETIME` | No | `DEFAULT GETDATE()` | Checkout timestamp |
+ 
+#### 16.5 `OrderItems` Table
+| Column | Type | Nullable | Key / Constraint | Description |
+|---|---|---|---|---|
+| `OrderItemId` | `INT` | No | `PK, IDENTITY(1,1)` | Line item identifier |
+| `OrderId` | `INT` | No | `FK -> Orders(OrderId), INDEX`| Parent confirmed order |
+| `ProductId` | `INT` | No | `FK -> Products(ProductId)` | Purchased SKU identifier |
+| `Quantity` | `INT` | No | `CHECK (Quantity > 0)` | Units purchased |
+ 
+---
+ 
+### 17. Security Considerations
+ 
+1. **SQL Injection Prevention**: 100% of database interactions are orchestrated via SQLAlchemy 2.0 Core/ORM utilizing parameterized statements. No raw, dynamic string-concatenated SQL queries are permitted.
+2. **Cryptographic Storage**: Passwords undergo PBKDF2-HMAC-SHA256 derivation with 100,000 iterations and 16 bytes of cryptographically random salt generated via `os.urandom(16)`.
+3. **Cross-Site Scripting (XSS) Mitigation**:
+   - Angular’s built-in `DomSanitizer` cleans dynamic HTML data.
+   - Message markdown renderers selectively escape tags and allow only safe markup (`<strong>`, `<br>`, `<span>`).
+4. **CORS Governance**: Controlled CORS policies permit trusted origins in production and enforce strict HTTP method and header boundaries.
+5. **State Mutation Safeguards**:
+   - Cancellation is rejected on orders with status `DELIVERED` or `CANCELLED`.
+   - Cart modifications are scoped to the authenticated `UserId` or current session.
+ 
+---
+ 
+### 18. Error Handling Strategy
+ 
+- **Global HTTP Exception Handlers**: In FastAPI, custom exception handlers intercept `HTTPException`, validation errors (`RequestValidationError`), and unhandled exceptions, formatting them into consistent JSON schemas:
+  ```json
+  {
+    "detail": "Descriptive error message",
+    "status_code": 400,
+    "timestamp": "2026-09-18T12:00:00.000Z"
+  }
+  ```
+- **Angular Client-Side Interceptors**: `HttpInterceptor` catches non-2xx responses and surfaces user-friendly alerts using `MatSnackBar`.
+- **Conversational Fallback Strategy**: If the AI Assistant cannot resolve an explicit intent or if network failures occur, it gracefully defaults to `handleLocalQueryFallback()` in the client, ensuring the customer is never blocked.
+ 
+---
+ 
+### 19. Logging Strategy
+ 
+- **Python Logging Framework**: Configured using standard library `logging` with structured JSON output formatting.
+- **Log Levels**:
+  - `DEBUG`: Query plan inspections and intent resolution candidates.
+  - `INFO`: Customer login, order placement, order cancellation, and cart updates.
+  - `WARNING`: Out-of-stock product inquiries and rate-limit warnings.
+  - `ERROR`: Transaction rollbacks, database connection timeouts, and unhandled exceptions with full stack traces.
+- **Audit Trails**: Security-sensitive actions (password alterations, order cancellations) log client IP, timestamp, and user identifier.
+ 
+---
+ 
+### 20. Deployment Architecture
+ 
+```mermaid
+flowchart LR
+    subgraph Internet [Public Internet]
+        Browser[Client Browser / Desktop / Mobile]
+    end
+ 
+    subgraph ReverseProxy [Web Server / Reverse Proxy]
+        Nginx[Nginx Reverse Proxy / TLS 1.3 Termination]
+    end
+ 
+    subgraph AppHost [Application Runtime Container]
+        FastAPI_App[FastAPI ASGI Application]
+        UvicornWorkers[Uvicorn Worker Processes]
+    end
+ 
+    subgraph DatabaseHost [Database Server]
+        MSSQL[(Microsoft SQL Server)]
+    end
+ 
+    subgraph ExternalAI [Enterprise AI Cloud]
+        CapgeminiAI[Capgemini Generative Engine / openai.gpt-5-mini]
+    end
+ 
+    Browser -- HTTPS (Port 443) --> Nginx
+    Nginx -- Static Assets (HTML/JS/CSS) --> Browser
+    Nginx -- HTTP Proxy (Port 8000) --> UvicornWorkers
+    UvicornWorkers --> FastAPI_App
+    FastAPI_App -- ODBC TCP (Port 1433) --> MSSQL
+    FastAPI_App -- REST / HTTPS (TLS 1.3) --> CapgeminiAI
+```
+ 
+- **Frontend Hosting**: Distributed via Nginx or CDN serving pre-rendered static assets generated by `ng build`.
+- **Backend Service**: Containerized Docker image running Python 3.12, Uvicorn, and FastAPI behind an Nginx reverse proxy managing SSL termination and rate-limiting.
+- **Database Engine**: Microsoft SQL Server Enterprise or Azure SQL with automated transaction log backups and point-in-time recovery.
+ 
+---
+ 
+### 21. Future Enhancements
+ 
+1. **RAG Vector Search Integration**: Deploy a vector store (such as pgvector or Azure AI Search) storing dense embeddings of product manuals and reviews to support open-ended technical queries.
+2. **Autonomous Stock Replenishment**: Event-driven triggers notifying logistics partners when stock levels drop below reorder thresholds.
+3. **Multi-Channel Chatbot Webhooks**: Extend the AI Assistant engine to WhatsApp Business, Telegram, and Apple Business Chat.
+4. **Real-Time Payment Gateway Webhooks**: Integrate Razorpay / Stripe webhooks for instant automated payment reconciliations and automated refund disbursements.
+5. **AR Product Visualizer**: Add WebXR-powered 3D Augmented Reality visualization to the Angular product details page.
+ 
+---
+**Approval & Sign-Off:**  
+*Enterprise Solution Architect: ______________________*  
+*Technical Lead: ______________________*  
+*Date: September 18, 2026*
